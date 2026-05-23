@@ -11,8 +11,9 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  build     Compile markdown files into static HTML")
+	fmt.Println("  add       Create a new empty markdown file")
 	fmt.Println()
-	fmt.Println("Run 'zeka build -h' for options.")
+	fmt.Println("Run 'zeka <command> -h' for options.")
 }
 
 func main() {
@@ -50,6 +51,39 @@ func main() {
 		}
 
 		fmt.Printf("Build completed successfully. Output written to %s\n", outDir)
+
+	case "add":
+		addCmd := flag.NewFlagSet("add", flag.ExitOnError)
+
+		addCmd.Usage = func() {
+			fmt.Fprintf(os.Stderr, "Usage: zeka add [directory]\n")
+			addCmd.PrintDefaults()
+		}
+
+		if err := addCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing arguments: %v\n", err)
+			os.Exit(1)
+		}
+
+		targetDir := "."
+		args := addCmd.Args()
+		if len(args) > 0 {
+			targetDir = args[0]
+		}
+
+		if len(args) > 1 {
+			fmt.Fprintf(os.Stderr, "Error: 'add' command accepts at most 1 positional argument, got %d\n", len(args))
+			addCmd.Usage()
+			os.Exit(1)
+		}
+
+		filePath, err := RunAdd(targetDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to create note: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Created note: %s\n", filePath)
 
 	case "help", "-h", "--help":
 		printUsage()

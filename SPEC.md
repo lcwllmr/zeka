@@ -4,7 +4,7 @@
 `zeka` is a minimalist, cross-platform CLI tool designed to compile a flat directory of Markdown notes into a deployable folder of static HTML files. 
 
 **Current Scope:**
-The only supported operation is the `build` command, which acts as a Static Site Generator (SSG).
+The supported operations are the `build` command (which acts as a Static Site Generator (SSG)) and the `add` command (which creates a new empty markdown note).
 
 ## 2. Technical Constraints & Architecture
 * **Directory Structure:** Strictly flat. All Go source files, templates, and tests must reside in the root directory. No sub-packages.
@@ -67,9 +67,25 @@ The HTML template (`template.html`) is compiled directly into the binary using G
     - Execute the embedded HTML template using the assembled `TemplateData`.
     - Write the output to a `.html` file matching the base filename of the `.md` file in the output directory.
 
+### 4.2. The `add` Workflow
+1. **Parse CLI Arguments:**
+   - The tool supports the `add` command: `zeka add [directory]`
+   - Positionals: `[directory]` (defaults to `.` if not specified).
+2. **Name Generation:**
+   - Generate a 16-character lowercase hex string using 8 bytes of cryptographically secure random numbers from `crypto/rand`.
+   - Append `.md` to form the filename.
+3. **File Creation:**
+   - Attempt to create the file in the specified directory.
+   - To handle rare filename collisions, retry the name generation and file creation up to 10 times.
+   - The file creation must use atomic operations (e.g., `os.O_CREATE|os.O_EXCL`) to ensure a file is not overwritten.
+   - If creation succeeds, print the path of the created file to standard output.
+
 ## 5. Implementation Status Checklist
 - [x] Define Markdown extensions (`markdown.go`)
 - [x] Define HTML template (`template.html`)
 - [x] Implement `TemplateData` mapping and HTML generation logic (`build.go`)
 - [x] Implement CLI routing and directory scanning (`main.go`)
 - [x] Write tests for the build pipeline (`build_test.go`)
+- [x] Implement `add` command logic (`add.go`)
+- [x] Write tests for the `add` command (`add_test.go`)
+- [x] Integrate the `add` command into CLI routing (`main.go`)
