@@ -4,7 +4,7 @@
 `zeka` is a minimalist, cross-platform CLI tool designed to compile a flat directory of Markdown notes into a deployable folder of static HTML files. 
 
 **Current Scope:**
-The supported operations are the `build` command (which acts as a Static Site Generator (SSG)) and the `add` command (which creates a new empty markdown note).
+The supported operations are the `build` command (which acts as a Static Site Generator (SSG)), the `add` command (which creates a new empty markdown note), and the `lsp` command (which starts a Language Server Protocol server for editor integration).
 
 ## 2. Technical Constraints & Architecture
 * **Directory Structure:** Strictly flat. All Go source files, templates, and tests must reside in the root directory. No sub-packages.
@@ -80,6 +80,18 @@ The HTML template (`template.html`) is compiled directly into the binary using G
    - The file creation must use atomic operations (e.g., `os.O_CREATE|os.O_EXCL`) to ensure a file is not overwritten.
    - If creation succeeds, print the path of the created file to standard output.
 
+### 4.3. The `lsp` Workflow
+1. **Parse CLI Arguments:**
+   - The tool supports the `lsp` command: `zeka lsp`
+   - It takes no additional arguments.
+2. **Initialize JSON-RPC connection:**
+   - Connects to stdin and stdout using `github.com/sourcegraph/jsonrpc2`.
+   - Uses `jsonrpc2.VSCodeObjectCodec` to handle LSP header wrapping.
+3. **Handle Requests:**
+   - Handles the `initialize` request and returns a valid `InitializeResult` containing capabilities.
+   - For any other incoming requests, replies with `CodeMethodNotFound`.
+   - Ignores incoming notifications (such as `initialized`).
+
 ## 5. Implementation Status Checklist
 - [x] Define Markdown extensions (`markdown.go`)
 - [x] Define HTML template (`template.html`)
@@ -89,3 +101,7 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 - [x] Implement `add` command logic (`add.go`)
 - [x] Write tests for the `add` command (`add_test.go`)
 - [x] Integrate the `add` command into CLI routing (`main.go`)
+- [x] Implement `lsp` command logic (`lsp.go`)
+- [x] Write tests for the `lsp` command (`lsp_test.go`)
+- [x] Integrate the `lsp` command into CLI routing (`main.go`)
+- [x] Add editor instructions to `README.md`

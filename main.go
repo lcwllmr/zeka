@@ -12,6 +12,7 @@ func printUsage() {
 	fmt.Println("Commands:")
 	fmt.Println("  build     Compile markdown files into static HTML")
 	fmt.Println("  add       Create a new empty markdown file")
+	fmt.Println("  lsp       Start the Language Server Protocol server")
 	fmt.Println()
 	fmt.Println("Run 'zeka <command> -h' for options.")
 }
@@ -84,6 +85,30 @@ func main() {
 		}
 
 		fmt.Printf("Created note: %s\n", filePath)
+
+	case "lsp":
+		lspCmd := flag.NewFlagSet("lsp", flag.ExitOnError)
+
+		lspCmd.Usage = func() {
+			fmt.Fprintf(os.Stderr, "Usage: zeka lsp\n")
+			lspCmd.PrintDefaults()
+		}
+
+		if err := lspCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing arguments: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(lspCmd.Args()) > 0 {
+			fmt.Fprintf(os.Stderr, "Error: 'lsp' command accepts no arguments, got %d\n", len(lspCmd.Args()))
+			lspCmd.Usage()
+			os.Exit(1)
+		}
+
+		if err := RunLSP(os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "LSP server error: %v\n", err)
+			os.Exit(1)
+		}
 
 	case "help", "-h", "--help":
 		printUsage()
