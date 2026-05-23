@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.css" integrity="sha384-UA8juhPf75SzzAMA/4fo3yOU7sBJ0om7SCD2GHq0fZqZco6tr1UCV7nUbk9J90JM" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.js" integrity="sha384-Tt7wBxLKwSzFVRET4O4U9H6v8MNaQ/CjN2FMP4xFm0ErrFu6aNqoonRVW5W40iGI" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
+<script type="application/json" id="katex-macros">{{.Macros}}</script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const macrosEl = document.getElementById("katex-macros");
+  const macros = macrosEl && macrosEl.textContent.trim() ? JSON.parse(macrosEl.textContent) : {};
+  renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '$', right: '$', display: false},
+    ],
+    throwOnError: false,
+    macros: macros
+  });
+});
+</script>
+<style>
+body{max-width:800px;margin:2rem auto;padding:0 1rem;font-family:system-ui,sans-serif;line-height:1.6}
+h2,h3,h4,h5,h6{margin-top:1.5rem}
+pre{background:#f4f4f4;padding:1rem;overflow:auto}
+code{background:#f4f4f4;padding:.2em .4em;border-radius:3px}
+pre code{background:none;padding:0}
+</style>
+</head>
+<body>
+<h1>{{.Title}}</h1>
+{{.Abstract}}
+{{if .TOC}}
+<nav>
+{{range .TOC}}
+{{if .CloseLI}}</li>{{end}}
+{{range repeat .OpenUL}}<ul>{{end}}
+<li><a href="#{{.ID}}">{{.Text}}</a>
+{{range repeat .CloseUL}}</li></ul>{{end}}
+{{end}}
+</nav>
+{{end}}
+<main>{{.Body}}</main>
+</body>
+</html>
