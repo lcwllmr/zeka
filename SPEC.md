@@ -8,7 +8,7 @@ The supported operations are the `build` command (which acts as a Static Site Ge
 
 ## 2. Technical Constraints & Architecture
 * **Directory Structure:** Strictly flat. All Go source files, templates, and tests must reside in the root directory. No sub-packages.
-* **Dependencies:** Restricted to the Go standard library, `github.com/yuin/goldmark`, and `go.yaml.in/yaml/v4`. No new external dependencies are permitted.
+* **Dependencies:** Restricted to the Go standard library, `github.com/yuin/goldmark`, `go.yaml.in/yaml/v4`, `github.com/sourcegraph/jsonrpc2`, `github.com/pkg/browser`, and `github.com/fsnotify/fsnotify`.
 * **Testing:** Every Go file (except `main.go`) must have a corresponding `*_test.go` file. Tests must be simple, readable, and verify exact behavior.
 * **Style:** Idiomatic, minimal Go. Prefer predictability over abstraction.
 
@@ -25,11 +25,12 @@ To satisfy `template.html`, the `build` pipeline must map the parsed Markdown in
 
 ```go
 type TemplateData struct {
-    Title    string
-    Abstract string
-    Macros   template.HTML // JSON serialized representation of the Macros map, typed as template.HTML to prevent escaping inside <script>
-    TOC      []HeadingInfo
-    Body     template.HTML // The rendered HTML from Goldmark
+	Title    string
+	Abstract string
+	Macros   template.JS // JSON serialized representation of the Macros map
+	TOC      []HeadingInfo
+	Body     template.HTML // The rendered HTML from Goldmark
+	Preview  bool          // Controls inclusion of SSE client and morphdom in template.html
 }
 ```
 
@@ -92,6 +93,27 @@ The HTML template (`template.html`) is compiled directly into the binary using G
    - For any other incoming requests, replies with `CodeMethodNotFound`.
    - Ignores incoming notifications (such as `initialized`).
 
+### 4.4. The `watch` Workflow
+1. **Parse CLI Arguments:**
+   - The tool supports the `watch` command: `zeka watch [directory] [flags]`
+   - Positionals: `[directory]` (defaults to `.` if empty).
+   - Flags:
+     - `-p`: The port to bind to (default: `0` for random assignment).
+     - `-x`: Boolean flag to automatically open the preview in the default browser window.
+2. **Launch HTTP Preview Server:**
+   - Binds to the specified port on `127.0.0.1`. If port is `0`, a random free port is chosen.
+   - Establishes handlers:
+     - `GET /events`: SSE handler. Accepts optional query parameter `?file=`. Streams HTML changes. If the target is the root path (`/` or empty), registers to receive changes for any modified file.
+     - `GET /`: Renders and serves the most recently modified `.md` file in the watch directory. If no `.md` files exist, serves a placeholder page.
+     - `GET /*`: Resolves `<path>` to `<name>.md` in the directory, compiles it using the embedded `template.html` (with `Preview` set to `true`), and serves it.
+3. **Open Browser & Print Info:**
+   - Prints the watch URL to the console (e.g. `http://127.0.0.1:<port>`).
+   - If the `-x` flag was provided, launches a browser window to that URL using `github.com/pkg/browser`.
+4. **File Watching & Reloads:**
+   - Monitors the directory (flat structure, no sub-directories) using `github.com/fsnotify/fsnotify`.
+   - On `.md` file changes, re-renders the document and pushes the updated HTML to connected clients listening to that specific file, as well as clients watching the root path (`/`).
+   - On file deletion, pushes a "deleted/not found" warning page to file-specific clients, and updates root path clients to show the new most recently modified note (or a placeholder page if none remain).
+
 ## 5. Implementation Status Checklist
 - [x] Define Markdown extensions (`markdown.go`)
 - [x] Define HTML template (`template.html`)
@@ -105,3 +127,6 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 - [x] Write tests for the `lsp` command (`lsp_test.go`)
 - [x] Integrate the `lsp` command into CLI routing (`main.go`)
 - [x] Add editor instructions to `README.md`
+- [x] Implement `watch` command logic (`watch.go`)
+- [x] Write tests for the `watch` command (`watch_test.go`)
+- [x] Integrate the `watch` command into CLI routing (`main.go`)

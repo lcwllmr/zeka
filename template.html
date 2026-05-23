@@ -7,19 +7,25 @@
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.js" integrity="sha384-Tt7wBxLKwSzFVRET4O4U9H6v8MNaQ/CjN2FMP4xFm0ErrFu6aNqoonRVW5W40iGI" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
 <script type="application/json" id="katex-macros">{{.Macros}}</script>
+{{if .Preview}}
+<script src="https://unpkg.com/morphdom@2.7.3/dist/morphdom-umd.js"></script>
+{{end}}
 <script>
-document.addEventListener("DOMContentLoaded", function() {
+function renderKaTeX() {
   const macrosEl = document.getElementById("katex-macros");
   const macros = macrosEl && macrosEl.textContent.trim() ? JSON.parse(macrosEl.textContent) : {};
-  renderMathInElement(document.body, {
-    delimiters: [
-      {left: '$$', right: '$$', display: true},
-      {left: '$', right: '$', display: false},
-    ],
-    throwOnError: false,
-    macros: macros
-  });
-});
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$', right: '$', display: false},
+      ],
+      throwOnError: false,
+      macros: macros
+    });
+  }
+}
+document.addEventListener("DOMContentLoaded", renderKaTeX);
 </script>
 <style>
 body{max-width:800px;margin:2rem auto;padding:0 1rem;font-family:system-ui,sans-serif;line-height:1.6}
@@ -30,6 +36,7 @@ pre code{background:none;padding:0}
 </style>
 </head>
 <body>
+{{if .Preview}}<div id="preview-container" data-title="{{.Title}}">{{end}}
 <h1>{{.Title}}</h1>
 {{.Abstract}}
 {{if .TOC}}
@@ -43,5 +50,37 @@ pre code{background:none;padding:0}
 </nav>
 {{end}}
 <main>{{.Body}}</main>
+{{if .Preview}}
+</div>
+<script>
+(function() {
+  const currentPath = window.location.pathname;
+  const evtSource = new EventSource("/events?file=" + encodeURIComponent(currentPath));
+  const container = document.getElementById("preview-container");
+
+  evtSource.onmessage = function(event) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(event.data, "text/html");
+    const newContainer = doc.getElementById("preview-container");
+    if (newContainer) {
+      morphdom(container, newContainer);
+      document.title = doc.title;
+      const newMacros = doc.getElementById("katex-macros");
+      const oldMacros = document.getElementById("katex-macros");
+      if (newMacros && oldMacros) {
+        oldMacros.textContent = newMacros.textContent;
+      }
+      if (typeof renderKaTeX === 'function') {
+        renderKaTeX();
+      }
+    }
+  };
+
+  evtSource.onerror = function(err) {
+    console.error("Connection lost. Retrying automatically...", err);
+  };
+})();
+</script>
+{{end}}
 </body>
 </html>

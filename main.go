@@ -13,6 +13,7 @@ func printUsage() {
 	fmt.Println("  build     Compile markdown files into static HTML")
 	fmt.Println("  add       Create a new empty markdown file")
 	fmt.Println("  lsp       Start the Language Server Protocol server")
+	fmt.Println("  watch     Start a local web server with real-time preview")
 	fmt.Println()
 	fmt.Println("Run 'zeka <command> -h' for options.")
 }
@@ -107,6 +108,41 @@ func main() {
 
 		if err := RunLSP(os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "LSP server error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "watch":
+		watchCmd := flag.NewFlagSet("watch", flag.ExitOnError)
+
+		var port int
+		var openBrowser bool
+		watchCmd.IntVar(&port, "p", 0, "port to listen on (0 for random)")
+		watchCmd.BoolVar(&openBrowser, "x", false, "automatically open preview in the default browser")
+
+		watchCmd.Usage = func() {
+			fmt.Fprintf(os.Stderr, "Usage: zeka watch [directory] [flags]\n\nFlags:\n")
+			watchCmd.PrintDefaults()
+		}
+
+		if err := watchCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing arguments: %v\n", err)
+			os.Exit(1)
+		}
+
+		targetDir := "."
+		args := watchCmd.Args()
+		if len(args) > 0 {
+			targetDir = args[0]
+		}
+
+		if len(args) > 1 {
+			fmt.Fprintf(os.Stderr, "Error: 'watch' command accepts at most 1 positional argument, got %d\n", len(args))
+			watchCmd.Usage()
+			os.Exit(1)
+		}
+
+		if err := RunWatch(targetDir, port, openBrowser); err != nil {
+			fmt.Fprintf(os.Stderr, "Watch server error: %v\n", err)
 			os.Exit(1)
 		}
 
