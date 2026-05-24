@@ -90,8 +90,11 @@ func main() {
 	case "lsp":
 		lspCmd := flag.NewFlagSet("lsp", flag.ExitOnError)
 
+		var openBrowser bool
+		lspCmd.BoolVar(&openBrowser, "x", false, "automatically open preview in the default browser")
+
 		lspCmd.Usage = func() {
-			fmt.Fprintf(os.Stderr, "Usage: zeka lsp\n")
+			fmt.Fprintf(os.Stderr, "Usage: zeka lsp [flags]\n\nFlags:\n")
 			lspCmd.PrintDefaults()
 		}
 
@@ -101,12 +104,12 @@ func main() {
 		}
 
 		if len(lspCmd.Args()) > 0 {
-			fmt.Fprintf(os.Stderr, "Error: 'lsp' command accepts no arguments, got %d\n", len(lspCmd.Args()))
+			fmt.Fprintf(os.Stderr, "Error: 'lsp' command accepts no positional arguments, got %d\n", len(lspCmd.Args()))
 			lspCmd.Usage()
 			os.Exit(1)
 		}
 
-		if err := RunLSP(os.Stdin, os.Stdout); err != nil {
+		if err := RunLSP(os.Stdin, os.Stdout, openBrowser); err != nil {
 			fmt.Fprintf(os.Stderr, "LSP server error: %v\n", err)
 			os.Exit(1)
 		}

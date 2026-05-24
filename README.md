@@ -5,7 +5,7 @@ To configure the Helix editor to use the `zeka lsp` language server for Markdown
 ```toml
 [language-server.zeka]
 command = "zeka"
-args = ["lsp"]
+args = ["lsp", "-x"]
 
 [[language]]
 name = "markdown"

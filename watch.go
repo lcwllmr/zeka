@@ -25,9 +25,13 @@ type Client struct {
 
 // WatchServer manages active clients and handles directory-based HTTP requests.
 type WatchServer struct {
-	watchDir string
-	mu       sync.Mutex
-	clients  map[*Client]bool
+	watchDir       string
+	mu             sync.Mutex
+	clients        map[*Client]bool
+	memFiles       map[string]string
+	server         *http.Server
+	pendingChanges map[string]string
+	debounceTimer  *time.Timer
 }
 
 // register adds a client to the server's client list.
@@ -180,15 +184,26 @@ func (ws *WatchServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Serve the markdown file preview
 	fullPath := filepath.Join(ws.watchDir, targetFile)
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		html := ws.renderDeletedPage(targetFile)
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(html))
-		return
+
+	ws.mu.Lock()
+	memContent, hasMem := ws.memFiles[targetFile]
+	ws.mu.Unlock()
+
+	var html string
+	var err error
+	if hasMem {
+		html, _, err = RenderMarkdownContent([]byte(memContent), true)
+	} else {
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			html = ws.renderDeletedPage(targetFile)
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(html))
+			return
+		}
+		html, _, err = RenderMarkdownFile(fullPath, true)
 	}
 
-	html, _, err := RenderMarkdownFile(fullPath, true)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error rendering markdown: %v", err), http.StatusInternalServerError)
 		return
@@ -379,6 +394,132 @@ func RunWatch(dir string, port int, openBrowser bool) error {
 	server := &http.Server{
 		Handler: ws,
 	}
+	ws.server = server
 
 	return server.Serve(listener)
+}
+
+// UpdateInMemoryFile updates the in-memory content of a file and broadcasts the change.
+func (ws *WatchServer) UpdateInMemoryFile(filename string, content string, immediate bool) {
+	ws.mu.Lock()
+	if ws.memFiles == nil {
+		ws.memFiles = make(map[string]string)
+	}
+
+	if !immediate {
+		if ws.pendingChanges == nil {
+			ws.pendingChanges = make(map[string]string)
+		}
+		ws.pendingChanges[filename] = content
+
+		if ws.debounceTimer != nil {
+			ws.debounceTimer.Stop()
+		}
+
+		ws.debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
+			ws.mu.Lock()
+			changes := ws.pendingChanges
+			ws.pendingChanges = make(map[string]string)
+			for fname, data := range changes {
+				ws.memFiles[fname] = data
+			}
+			ws.mu.Unlock()
+
+			for fname, data := range changes {
+				html, _, err := RenderMarkdownContent([]byte(data), true)
+				if err == nil {
+					ws.broadcast(fname, html)
+					ws.broadcast("", html)
+				} else {
+					log.Printf("Error rendering in-memory %s: %v", fname, err)
+				}
+			}
+		})
+		ws.mu.Unlock()
+		return
+	}
+
+	if ws.pendingChanges != nil {
+		delete(ws.pendingChanges, filename)
+	}
+	ws.memFiles[filename] = content
+	ws.mu.Unlock()
+
+	html, _, err := RenderMarkdownContent([]byte(content), true)
+	if err == nil {
+		ws.broadcast(filename, html)
+		ws.broadcast("", html)
+	} else {
+		log.Printf("Error rendering in-memory %s: %v", filename, err)
+	}
+}
+
+// RemoveInMemoryFile clears the document content from memory.
+func (ws *WatchServer) RemoveInMemoryFile(filename string) {
+	ws.mu.Lock()
+	if ws.memFiles != nil {
+		delete(ws.memFiles, filename)
+	}
+	ws.mu.Unlock()
+}
+
+// Close stops the HTTP server.
+func (ws *WatchServer) Close() error {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	if ws.debounceTimer != nil {
+		ws.debounceTimer.Stop()
+	}
+	if ws.server != nil {
+		return ws.server.Close()
+	}
+	return nil
+}
+
+// StartLSPWatchServer starts a preview server on a random port for LSP integration, and opens the browser.
+func StartLSPWatchServer(dir string) (*WatchServer, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute path of directory: %w", err)
+	}
+	if info, err := os.Stat(absDir); err != nil {
+		return nil, fmt.Errorf("directory does not exist: %w", err)
+	} else if !info.IsDir() {
+		return nil, fmt.Errorf("path is not a directory: %s", absDir)
+	}
+
+	ws := &WatchServer{
+		watchDir: absDir,
+		clients:  make(map[*Client]bool),
+		memFiles: make(map[string]string),
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on random port: %w", err)
+	}
+
+	actualPort := listener.Addr().(*net.TCPAddr).Port
+	url := fmt.Sprintf("http://127.0.0.1:%d", actualPort)
+
+	// Since LSP runs on stdout/stdin, print startup logs to stderr
+	log.Printf("LSP watch server starting on: %s", url)
+
+	go func() {
+		_ = browser.OpenURL(url)
+	}()
+
+	server := &http.Server{
+		Addr:    fmt.Sprintf("127.0.0.1:%d", actualPort),
+		Handler: ws,
+	}
+	ws.server = server
+
+	go func() {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			log.Printf("LSP watch server error: %v", err)
+		}
+	}()
+
+	return ws, nil
 }

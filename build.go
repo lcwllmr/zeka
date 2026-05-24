@@ -34,7 +34,11 @@ func RenderMarkdownFile(filePath string, isPreview bool) (string, TemplateData, 
 	if err != nil {
 		return "", TemplateData{}, fmt.Errorf("failed to read file: %w", err)
 	}
+	return RenderMarkdownContent(content, isPreview)
+}
 
+// RenderMarkdownContent parses and renders markdown content and executes the HTML template.
+func RenderMarkdownContent(content []byte, isPreview bool) (string, TemplateData, error) {
 	md := goldmark.New(
 		goldmark.WithExtensions(
 			FrontmatterExtension(),

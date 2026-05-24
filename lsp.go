@@ -2,8 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/sourcegraph/jsonrpc2"
 )
@@ -18,24 +23,158 @@ func (rwc readWriteCloser) Close() error {
 	return nil
 }
 
+// lastLSPWatchServer tracks the watch server started by the last active LSP server instance (for testing purposes).
+var lastLSPWatchServer *WatchServer
+
 // lspHandler handles JSON-RPC 2.0 requests for the Language Server.
-type lspHandler struct{}
+type lspHandler struct {
+	xFlag bool
+	mu    sync.Mutex
+	ws    *WatchServer
+}
+
+type didOpenParams struct {
+	TextDocument struct {
+		URI  string `json:"uri"`
+		Text string `json:"text"`
+	} `json:"textDocument"`
+}
+
+type didChangeParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+	ContentChanges []struct {
+		Text string `json:"text"`
+	} `json:"contentChanges"`
+}
+
+type didCloseParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+}
+
+func parseFilePath(uri string) string {
+	if !strings.HasPrefix(uri, "file://") {
+		return ""
+	}
+	path := strings.TrimPrefix(uri, "file://")
+	if len(path) > 2 && path[0] == '/' && path[2] == ':' {
+		path = path[1:]
+	}
+	return filepath.Clean(path)
+}
 
 // Handle processes incoming JSON-RPC requests.
 func (h *lspHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
 	switch req.Method {
 	case "initialize":
-		type ServerCapabilities struct{}
+		var params struct {
+			RootPath string `json:"rootPath"`
+			RootURI  string `json:"rootUri"`
+		}
+		if req.Params != nil {
+			_ = json.Unmarshal(*req.Params, &params)
+		}
+
+		workspaceDir := ""
+		if params.RootURI != "" {
+			workspaceDir = parseFilePath(params.RootURI)
+		}
+		if workspaceDir == "" && params.RootPath != "" {
+			workspaceDir = params.RootPath
+		}
+		if workspaceDir == "" {
+			workspaceDir = "."
+		}
+
+		if h.xFlag {
+			h.mu.Lock()
+			if h.ws == nil {
+				ws, err := StartLSPWatchServer(workspaceDir)
+				if err != nil {
+					log.Printf("Failed to start LSP watch server: %v", err)
+				} else {
+					h.ws = ws
+					lastLSPWatchServer = ws
+				}
+			}
+			h.mu.Unlock()
+		}
+
+		type TextDocumentSyncOptions struct {
+			OpenClose bool `json:"openClose"`
+			Change    int  `json:"change"`
+		}
+		type ServerCapabilities struct {
+			TextDocumentSync TextDocumentSyncOptions `json:"textDocumentSync"`
+		}
 		type InitializeResult struct {
 			Capabilities ServerCapabilities `json:"capabilities"`
 		}
 		res := InitializeResult{
-			Capabilities: ServerCapabilities{},
+			Capabilities: ServerCapabilities{
+				TextDocumentSync: TextDocumentSyncOptions{
+					OpenClose: true,
+					Change:    1, // Full document sync
+				},
+			},
 		}
 		if err := conn.Reply(ctx, req.ID, res); err != nil {
-			// LSP stream is stdout, any debugging/logging should go to stderr.
 			return
 		}
+
+	case "textDocument/didOpen":
+		if req.Params == nil {
+			return
+		}
+		var params didOpenParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return
+		}
+		filename := filepath.Base(parseFilePath(params.TextDocument.URI))
+		h.mu.Lock()
+		ws := h.ws
+		h.mu.Unlock()
+		if ws != nil {
+			ws.UpdateInMemoryFile(filename, params.TextDocument.Text, true)
+		}
+
+	case "textDocument/didChange":
+		if req.Params == nil {
+			return
+		}
+		var params didChangeParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return
+		}
+		if len(params.ContentChanges) > 0 {
+			filename := filepath.Base(parseFilePath(params.TextDocument.URI))
+			h.mu.Lock()
+			ws := h.ws
+			h.mu.Unlock()
+			if ws != nil {
+				ws.UpdateInMemoryFile(filename, params.ContentChanges[0].Text, false)
+			}
+		}
+
+	case "textDocument/didClose":
+		if req.Params == nil {
+			return
+		}
+		var params didCloseParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return
+		}
+		filename := filepath.Base(parseFilePath(params.TextDocument.URI))
+		h.mu.Lock()
+		ws := h.ws
+		h.mu.Unlock()
+		if ws != nil {
+			ws.RemoveInMemoryFile(filename)
+		}
+
 	default:
 		if !req.Notif {
 			errErr := &jsonrpc2.Error{
@@ -48,10 +187,19 @@ func (h *lspHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonr
 }
 
 // RunLSP starts the Language Server Protocol session on the given reader/writer.
-func RunLSP(in io.Reader, out io.Writer) error {
-	handler := &lspHandler{}
+func RunLSP(in io.Reader, out io.Writer, xFlag bool) error {
+	handler := &lspHandler{
+		xFlag: xFlag,
+	}
 	stream := jsonrpc2.NewBufferedStream(readWriteCloser{Reader: in, Writer: out}, jsonrpc2.VSCodeObjectCodec{})
 	conn := jsonrpc2.NewConn(context.Background(), stream, handler)
 	<-conn.DisconnectNotify()
+
+	handler.mu.Lock()
+	if handler.ws != nil {
+		_ = handler.ws.Close()
+	}
+	handler.mu.Unlock()
+
 	return nil
 }

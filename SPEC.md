@@ -83,15 +83,19 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 
 ### 4.3. The `lsp` Workflow
 1. **Parse CLI Arguments:**
-   - The tool supports the `lsp` command: `zeka lsp`
-   - It takes no additional arguments.
+   - The tool supports the `lsp` command: `zeka lsp [flags]`
+   - Flags:
+     - `-x`: Boolean flag to automatically start the watch preview server and open it in the default browser.
 2. **Initialize JSON-RPC connection:**
    - Connects to stdin and stdout using `github.com/sourcegraph/jsonrpc2`.
    - Uses `jsonrpc2.VSCodeObjectCodec` to handle LSP header wrapping.
-3. **Handle Requests:**
-   - Handles the `initialize` request and returns a valid `InitializeResult` containing capabilities.
-   - For any other incoming requests, replies with `CodeMethodNotFound`.
-   - Ignores incoming notifications (such as `initialized`).
+3. **Handle Requests and Notifications:**
+   - Handles the `initialize` request, extracting the workspace path from `rootUri` or `rootPath` (defaulting to `.`). It returns an `InitializeResult` stating text document synchronization capabilities (`textDocumentSync` = 1, i.e., Full Sync).
+   - If the `-x` flag was provided to the command, starting the LSP server triggers launching a background HTTP watch preview server (binding to a random free port `127.0.0.1:0`) and automatically opens the preview page in the default browser using `github.com/pkg/browser`.
+   - Handles `textDocument/didOpen` notification: stores the document's content in memory and immediately triggers a render and broadcast of the updated page to clients.
+   - Handles `textDocument/didChange` notification: stores the new document content in memory and triggers a debounced render and broadcast (cooldown interval of 100ms) to avoid over-rendering on every keystroke.
+   - Handles `textDocument/didClose` notification: clears the document content from memory.
+   - For any other incoming requests, replies with `CodeMethodNotFound`. Ignores other notifications.
 
 ### 4.4. The `watch` Workflow
 1. **Parse CLI Arguments:**
@@ -130,3 +134,6 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 - [x] Implement `watch` command logic (`watch.go`)
 - [x] Write tests for the `watch` command (`watch_test.go`)
 - [x] Integrate the `watch` command into CLI routing (`main.go`)
+- [x] Add preview server and browser launch to `lsp` command (`lsp.go`)
+- [x] Implement LSP text synchronization and debounce logic (`lsp.go`, `watch.go`)
+- [x] Add tests for LSP changes and preview integration (`lsp_test.go`)
