@@ -155,8 +155,8 @@ func TestLSPWatchServer(t *testing.T) {
 		t.Fatal("expected watch server address to be populated")
 	}
 
-	// 1. Send didOpen notification for a file named "testfile.md"
-	fileURI := tmpURI + "/testfile.md"
+	// 1. Send didOpen notification for a file named "0123456789abcdef.md"
+	fileURI := tmpURI + "/0123456789abcdef.md"
 	didOpenNotification := struct {
 		TextDocument struct {
 			URI        string `json:"uri"`
@@ -179,9 +179,9 @@ func TestLSPWatchServer(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Query the preview server
-	resp, err := http.Get("http://" + addr + "/testfile.html")
+	resp, err := http.Get("http://" + addr + "/0123456789abcdef.html")
 	if err != nil {
-		t.Fatalf("failed to GET /testfile.html: %v", err)
+		t.Fatalf("failed to GET /0123456789abcdef.html: %v", err)
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -192,6 +192,26 @@ func TestLSPWatchServer(t *testing.T) {
 	if !strings.Contains(string(body), "Hello LSP World") {
 		t.Errorf("expected body to contain 'Hello LSP World', got: %s", string(body))
 	}
+
+	// Try didOpen for an invalid non-Zettelkasten filename
+	invalidURI := tmpURI + "/invalidname.md"
+	invalidOpenNotification := didOpenNotification
+	invalidOpenNotification.TextDocument.URI = invalidURI
+	invalidOpenNotification.TextDocument.Text = "# Title\nHello Invalid World"
+	err = clientConn.Notify(ctx, "textDocument/didOpen", invalidOpenNotification)
+	if err != nil {
+		t.Fatalf("failed to notify didOpen for invalid file: %v", err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	resp, err = http.Get("http://" + addr + "/invalidname.html")
+	if err != nil {
+		t.Fatalf("failed to GET: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected status 404 for invalid filename, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
 
 	// 2. Send didChange notification
 	didChangeNotification := struct {
@@ -218,7 +238,7 @@ func TestLSPWatchServer(t *testing.T) {
 
 	// Verify that the change is NOT immediate due to debouncing
 	time.Sleep(20 * time.Millisecond)
-	resp, err = http.Get("http://" + addr + "/testfile.html")
+	resp, err = http.Get("http://" + addr + "/0123456789abcdef.html")
 	if err == nil {
 		body, _ = ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -231,9 +251,9 @@ func TestLSPWatchServer(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	// Now it should be updated
-	resp, err = http.Get("http://" + addr + "/testfile.html")
+	resp, err = http.Get("http://" + addr + "/0123456789abcdef.html")
 	if err != nil {
-		t.Fatalf("failed to GET /testfile.html after debounce: %v", err)
+		t.Fatalf("failed to GET /0123456789abcdef.html after debounce: %v", err)
 	}
 	body, err = ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -271,7 +291,7 @@ func TestLSPWatchServer(t *testing.T) {
 	}
 
 	// Try querying the preview server again to verify it is closed
-	_, err = http.Get("http://" + addr + "/testfile.html")
+	_, err = http.Get("http://" + addr + "/0123456789abcdef.html")
 	if err == nil {
 		t.Error("expected watch server to be closed, but GET succeeded")
 	}

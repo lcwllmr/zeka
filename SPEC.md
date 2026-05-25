@@ -59,7 +59,7 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 2.  **Initialize Output:** 
     - Clear the output directory by deleting it (if it exists) and recreating it to ensure a clean build.
 3.  **Scan Directory:** 
-    - Scan the input directory and find all files with the `.md` extension. Do not traverse recursively.
+    - Scan the input directory and find all files with the `.md` extension that match the 16-character hexadecimal filename naming convention (Zettelkasten files). Do not traverse recursively.
 4.  **Process Files:** For each `.md` file:
     - Read the file contents.
     - Parse using Goldmark with `HeadingsExtension()`, `FrontmatterExtension()`, and `KatexExtension()` registered.
@@ -92,9 +92,9 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 3. **Handle Requests and Notifications:**
    - Handles the `initialize` request, extracting the workspace path from `rootUri` or `rootPath` (defaulting to `.`). It returns an `InitializeResult` stating text document synchronization capabilities (`textDocumentSync` = 1, i.e., Full Sync).
    - If the `-x` flag was provided to the command, starting the LSP server triggers launching a background HTTP watch preview server (binding to a random free port `127.0.0.1:0`) and automatically opens the preview page in the default browser using `github.com/pkg/browser`.
-   - Handles `textDocument/didOpen` notification: stores the document's content in memory and immediately triggers a render and broadcast of the updated page to clients.
-   - Handles `textDocument/didChange` notification: stores the new document content in memory and triggers a debounced render and broadcast (cooldown interval of 100ms) to avoid over-rendering on every keystroke.
-   - Handles `textDocument/didClose` notification: clears the document content from memory.
+   - Handles `textDocument/didOpen` notification: if the file name matches the Zettelkasten pattern, stores the document's content in memory and immediately triggers a render and broadcast of the updated page to clients.
+   - Handles `textDocument/didChange` notification: if the file name matches the Zettelkasten pattern, stores the new document content in memory and triggers a debounced render and broadcast (cooldown interval of 100ms) to avoid over-rendering on every keystroke.
+   - Handles `textDocument/didClose` notification: if the file name matches the Zettelkasten pattern, clears the document content from memory.
    - For any other incoming requests, replies with `CodeMethodNotFound`. Ignores other notifications.
 
 ### 4.4. The `watch` Workflow
@@ -107,16 +107,16 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 2. **Launch HTTP Preview Server:**
    - Binds to the specified port on `127.0.0.1`. If port is `0`, a random free port is chosen.
    - Establishes handlers:
-     - `GET /events`: SSE handler. Accepts optional query parameter `?file=`. Streams HTML changes. If the target is the root path (`/` or empty), registers to receive changes for any modified file.
-     - `GET /`: Renders and serves the most recently modified `.md` file in the watch directory. If no `.md` files exist, serves a placeholder page.
-     - `GET /*`: Resolves `<path>` to `<name>.md` in the directory, compiles it using the embedded `template.html` (with `Preview` set to `true`), and serves it.
+     - `GET /events`: SSE handler. Accepts optional query parameter `?file=`. Streams HTML changes. If the target is the root path (`/` or empty), registers to receive changes for any modified Zettelkasten file.
+     - `GET /`: Renders and serves the most recently modified Zettelkasten `.md` file in the watch directory. If no Zettelkasten `.md` files exist, serves a placeholder page.
+     - `GET /*`: Resolves `<path>` to `<name>.md` in the directory. If it matches the Zettelkasten naming pattern, compiles it using the embedded `template.html` (with `Preview` set to `true`), and serves it. Otherwise, returns a 404 error.
 3. **Open Browser & Print Info:**
    - Prints the watch URL to the console (e.g. `http://127.0.0.1:<port>`).
    - If the `-x` flag was provided, launches a browser window to that URL using `github.com/pkg/browser`.
 4. **File Watching & Reloads:**
    - Monitors the directory (flat structure, no sub-directories) using `github.com/fsnotify/fsnotify`.
-   - On `.md` file changes, re-renders the document and pushes the updated HTML to connected clients listening to that specific file, as well as clients watching the root path (`/`).
-   - On file deletion, pushes a "deleted/not found" warning page to file-specific clients, and updates root path clients to show the new most recently modified note (or a placeholder page if none remain).
+   - On Zettelkasten `.md` file changes, re-renders the document and pushes the updated HTML to connected clients listening to that specific file, as well as clients watching the root path (`/`). Non-Zettelkasten files are ignored.
+   - On Zettelkasten file deletion, pushes a "deleted/not found" warning page to file-specific clients, and updates root path clients to show the new most recently modified Zettelkasten note (or a placeholder page if none remain).
 
 ## 5. Implementation Status Checklist
 - [x] Define Markdown extensions (`markdown.go`)
@@ -137,3 +137,5 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 - [x] Add preview server and browser launch to `lsp` command (`lsp.go`)
 - [x] Implement LSP text synchronization and debounce logic (`lsp.go`, `watch.go`)
 - [x] Add tests for LSP changes and preview integration (`lsp_test.go`)
+- [x] Enforce Zettelkasten filename filtering (16-char hex name) in build, watch, and LSP
+- [x] Add tests for Zettelkasten file filtering in build, watch, and LSP

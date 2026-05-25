@@ -22,7 +22,7 @@ func TestRunBuild_Success(t *testing.T) {
 		t.Fatalf("failed to create input dir: %v", err)
 	}
 
-	// Create test markdown file
+	// Create test Zettelkasten markdown file (16-char hex name)
 	mdContent := `---
 title: "Physics Notes"
 abstract: "Summary of modern physics."
@@ -35,7 +35,12 @@ $$
 i h \frac{\partial}{\partial t}\Psi = \hat{H}\Psi
 $$
 `
-	if err := os.WriteFile(filepath.Join(inDir, "notes.md"), []byte(mdContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(inDir, "0123456789abcdef.md"), []byte(mdContent), 0644); err != nil {
+		t.Fatalf("failed to write 0123456789abcdef.md: %v", err)
+	}
+
+	// Create a non-Zettelkasten markdown file to verify it's ignored
+	if err := os.WriteFile(filepath.Join(inDir, "notes.md"), []byte("Ignore non-hex markdown"), 0644); err != nil {
 		t.Fatalf("failed to write notes.md: %v", err)
 	}
 
@@ -51,9 +56,15 @@ $$
 	}
 
 	// Verify output
-	outHTMLPath := filepath.Join(outDir, "notes.html")
+	outHTMLPath := filepath.Join(outDir, "0123456789abcdef.html")
 	if _, err := os.Stat(outHTMLPath); os.IsNotExist(err) {
-		t.Fatalf("notes.html was not generated in output directory")
+		t.Fatalf("0123456789abcdef.html was not generated in output directory")
+	}
+
+	// notes.md should not have been converted
+	ignoredNotesPath := filepath.Join(outDir, "notes.html")
+	if _, err := os.Stat(ignoredNotesPath); !os.IsNotExist(err) {
+		t.Errorf("notes.md was incorrectly processed and generated notes.html")
 	}
 
 	// README.txt should not have been converted
@@ -64,7 +75,7 @@ $$
 
 	htmlBytes, err := os.ReadFile(outHTMLPath)
 	if err != nil {
-		t.Fatalf("failed to read notes.html: %v", err)
+		t.Fatalf("failed to read 0123456789abcdef.html: %v", err)
 	}
 
 	html := string(htmlBytes)

@@ -134,6 +134,9 @@ func (h *lspHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonr
 			return
 		}
 		filename := filepath.Base(parseFilePath(params.TextDocument.URI))
+		if !isZettelkastenFile(filename) {
+			return
+		}
 		h.mu.Lock()
 		ws := h.ws
 		h.mu.Unlock()
@@ -151,6 +154,9 @@ func (h *lspHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonr
 		}
 		if len(params.ContentChanges) > 0 {
 			filename := filepath.Base(parseFilePath(params.TextDocument.URI))
+			if !isZettelkastenFile(filename) {
+				return
+			}
 			h.mu.Lock()
 			ws := h.ws
 			h.mu.Unlock()
@@ -168,6 +174,9 @@ func (h *lspHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonr
 			return
 		}
 		filename := filepath.Base(parseFilePath(params.TextDocument.URI))
+		if !isZettelkastenFile(filename) {
+			return
+		}
 		h.mu.Lock()
 		ws := h.ws
 		h.mu.Unlock()

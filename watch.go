@@ -70,10 +70,6 @@ func (ws *WatchServer) resolveTarget(path string) (string, string) {
 	name = strings.TrimSuffix(name, ".md")
 
 	if name == "" {
-		indexPage := filepath.Join(ws.watchDir, "index.md")
-		if _, err := os.Stat(indexPage); err == nil {
-			return "index.md", "index.md"
-		}
 		return "", ""
 	}
 
@@ -84,6 +80,9 @@ func (ws *WatchServer) resolveTarget(path string) (string, string) {
 	}
 
 	filename := name + ".md"
+	if !isZettelkastenFile(filename) {
+		return "", ""
+	}
 	return filename, filename
 }
 
@@ -98,7 +97,7 @@ func (ws *WatchServer) mostRecentFile() (string, error) {
 	var latestTime time.Time
 
 	for _, file := range files {
-		if file.IsDir() || !strings.HasSuffix(strings.ToLower(file.Name()), ".md") {
+		if file.IsDir() || !isZettelkastenFile(file.Name()) {
 			continue
 		}
 		info, err := file.Info()
@@ -287,7 +286,7 @@ func (ws *WatchServer) startWatcher() (*fsnotify.Watcher, error) {
 					return
 				}
 
-				if !strings.HasSuffix(strings.ToLower(event.Name), ".md") {
+				if !isZettelkastenFile(filepath.Base(event.Name)) {
 					continue
 				}
 

@@ -28,23 +28,28 @@ func TestResolveTarget(t *testing.T) {
 		t.Errorf("expected empty targets, got %q and %q", f, topic)
 	}
 
-	// 2. index.md exists -> index.md
+	// 2. index.md exists -> still rejected because it is not Zettelkasten
 	idxPath := filepath.Join(tmpDir, "index.md")
 	if err := os.WriteFile(idxPath, []byte("index content"), 0644); err != nil {
 		t.Fatalf("failed to write index: %v", err)
 	}
 	f, topic = ws.resolveTarget("/")
-	if f != "index.md" || topic != "index.md" {
-		t.Errorf("expected index.md, got %q and %q", f, topic)
+	if f != "" || topic != "" {
+		t.Errorf("expected empty targets for index.md, got %q and %q", f, topic)
 	}
 
-	// 3. clean name resolution
+	// 3. clean name resolution (invalid vs valid)
 	f, topic = ws.resolveTarget("/about.html")
-	if f != "about.md" || topic != "about.md" {
-		t.Errorf("expected about.md, got %q and %q", f, topic)
+	if f != "" || topic != "" {
+		t.Errorf("expected rejected target for non-hex name, got %q and %q", f, topic)
 	}
 
-	f, topic = ws.resolveTarget("/sub/about.html")
+	f, topic = ws.resolveTarget("/0123456789abcdef.html")
+	if f != "0123456789abcdef.md" || topic != "0123456789abcdef.md" {
+		t.Errorf("expected 0123456789abcdef.md, got %q and %q", f, topic)
+	}
+
+	f, topic = ws.resolveTarget("/sub/0123456789abcdef.html")
 	if f != "" || topic != "" {
 		t.Errorf("expected blocked traversal, got %q and %q", f, topic)
 	}
@@ -74,13 +79,13 @@ func TestServeHTTP(t *testing.T) {
 	}
 
 	// 2. Create note A
-	noteAPath := filepath.Join(tmpDir, "a.md")
+	noteAPath := filepath.Join(tmpDir, "1111111111111111.md")
 	if err := os.WriteFile(noteAPath, []byte("---\ntitle: Note A\n---\nContent A"), 0644); err != nil {
 		t.Fatalf("failed to write note A: %v", err)
 	}
 
 	// Create note B
-	noteBPath := filepath.Join(tmpDir, "b.md")
+	noteBPath := filepath.Join(tmpDir, "2222222222222222.md")
 	if err := os.WriteFile(noteBPath, []byte("---\ntitle: Note B\n---\nContent B"), 0644); err != nil {
 		t.Fatalf("failed to write note B: %v", err)
 	}
@@ -101,8 +106,8 @@ func TestServeHTTP(t *testing.T) {
 		t.Errorf("expected page to show Note B, got %s", rr.Body.String())
 	}
 
-	// Test GET /a.html serves Note A
-	req = httptest.NewRequest("GET", "/a.html", nil)
+	// Test GET /1111111111111111.html serves Note A
+	req = httptest.NewRequest("GET", "/1111111111111111.html", nil)
 	rr = httptest.NewRecorder()
 	ws.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -110,6 +115,14 @@ func TestServeHTTP(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "Note A") {
 		t.Errorf("expected page to show Note A, got %s", rr.Body.String())
+	}
+
+	// Test GET /nonhex.html returns 404
+	req = httptest.NewRequest("GET", "/nonhex.html", nil)
+	rr = httptest.NewRecorder()
+	ws.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected status 404 for non-hex request, got %d", rr.Code)
 	}
 }
 
@@ -207,7 +220,7 @@ func TestRootSnappingAddDelete(t *testing.T) {
 	defer ws.unregister(rootClient)
 
 	// 1. Add note A
-	noteAPath := filepath.Join(tmpDir, "a.md")
+	noteAPath := filepath.Join(tmpDir, "1111111111111111.md")
 	if err := os.WriteFile(noteAPath, []byte("---\ntitle: Note A\n---\nContent A"), 0644); err != nil {
 		t.Fatalf("failed to write Note A: %v", err)
 	}
@@ -224,7 +237,7 @@ func TestRootSnappingAddDelete(t *testing.T) {
 	}
 
 	// 2. Add note B (more recent)
-	noteBPath := filepath.Join(tmpDir, "b.md")
+	noteBPath := filepath.Join(tmpDir, "2222222222222222.md")
 	if err := os.WriteFile(noteBPath, []byte("---\ntitle: Note B\n---\nContent B"), 0644); err != nil {
 		t.Fatalf("failed to write Note B: %v", err)
 	}

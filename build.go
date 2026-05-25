@@ -94,7 +94,7 @@ func RenderMarkdownContent(content []byte, isPreview bool) (string, TemplateData
 	return outBuf.String(), data, nil
 }
 
-// RunBuild compiles all .md files in inputDir into outDir using the embedded template.
+// RunBuild compiles all Zettelkasten .md files in inputDir into outDir using the embedded template.
 func RunBuild(inputDir, outDir string) error {
 	// 1. Scan the input directory for .md files
 	files, err := os.ReadDir(inputDir)
@@ -104,7 +104,7 @@ func RunBuild(inputDir, outDir string) error {
 
 	var mdFiles []os.DirEntry
 	for _, file := range files {
-		if !file.IsDir() && strings.ToLower(filepath.Ext(file.Name())) == ".md" {
+		if !file.IsDir() && isZettelkastenFile(file.Name()) {
 			mdFiles = append(mdFiles, file)
 		}
 	}
@@ -143,4 +143,18 @@ func RunBuild(inputDir, outDir string) error {
 	}
 
 	return nil
+}
+
+// isZettelkastenFile checks if the filename conforms to the 16-character hexadecimal naming convention (e.g. 0123456789abcdef.md).
+func isZettelkastenFile(filename string) bool {
+	if len(filename) != 19 || !strings.HasSuffix(strings.ToLower(filename), ".md") {
+		return false
+	}
+	for i := 0; i < 16; i++ {
+		c := filename[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
