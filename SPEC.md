@@ -91,8 +91,8 @@ The HTML template (`template.html`) is compiled directly into the binary using G
    - Uses `jsonrpc2.VSCodeObjectCodec` to handle LSP header wrapping.
 3. **Handle Requests and Notifications:**
    - Handles the `initialize` request, extracting the workspace path from `rootUri` or `rootPath` (defaulting to `.`). It returns an `InitializeResult` stating text document synchronization capabilities (`textDocumentSync` = 1, i.e., Full Sync).
-   - If the `-x` flag was provided to the command, starting the LSP server triggers launching a background HTTP watch preview server (binding to a random free port `127.0.0.1:0`) and automatically opens the preview page in the default browser using `github.com/pkg/browser`.
-   - Handles `textDocument/didOpen` notification: if the file name matches the Zettelkasten pattern, stores the document's content in memory and immediately triggers a render and broadcast of the updated page to clients.
+    - If the `-x` flag was provided to the command, starting the LSP server triggers launching a background HTTP watch preview server (binding to a random free port `127.0.0.1:0`). When a conforming Zettelkasten file is first opened (via `textDocument/didOpen`), the preview page for that specific file is automatically opened in the default browser using `github.com/pkg/browser` (no preview window is opened for non-conforming files).
+   - Handles `textDocument/didOpen` notification: if the file name matches the Zettelkasten pattern, stores the document's content in memory, immediately triggers a render and broadcast of the updated page to clients, and opens the preview browser if the `-x` flag was provided and it hasn't been opened yet.
    - Handles `textDocument/didChange` notification: if the file name matches the Zettelkasten pattern, stores the new document content in memory and triggers a debounced render and broadcast (cooldown interval of 100ms) to avoid over-rendering on every keystroke.
    - Handles `textDocument/didClose` notification: if the file name matches the Zettelkasten pattern, clears the document content from memory.
    - For any other incoming requests, replies with `CodeMethodNotFound`. Ignores other notifications.
@@ -108,7 +108,7 @@ The HTML template (`template.html`) is compiled directly into the binary using G
    - Binds to the specified port on `127.0.0.1`. If port is `0`, a random free port is chosen.
    - Establishes handlers:
      - `GET /events`: SSE handler. Accepts optional query parameter `?file=`. Streams HTML changes. If the target is the root path (`/` or empty), registers to receive changes for any modified Zettelkasten file.
-     - `GET /`: Renders and serves the most recently modified Zettelkasten `.md` file in the watch directory. If no Zettelkasten `.md` files exist, serves a placeholder page.
+     - `GET /`: Renders and serves the most recently modified Zettelkasten `.md` file in the watch directory. If no Zettelkasten `.md` files exist, serves a blank page.
      - `GET /*`: Resolves `<path>` to `<name>.md` in the directory. If it matches the Zettelkasten naming pattern, compiles it using the embedded `template.html` (with `Preview` set to `true`), and serves it. Otherwise, returns a 404 error.
 3. **Open Browser & Print Info:**
    - Prints the watch URL to the console (e.g. `http://127.0.0.1:<port>`).
@@ -116,7 +116,7 @@ The HTML template (`template.html`) is compiled directly into the binary using G
 4. **File Watching & Reloads:**
    - Monitors the directory (flat structure, no sub-directories) using `github.com/fsnotify/fsnotify`.
    - On Zettelkasten `.md` file changes, re-renders the document and pushes the updated HTML to connected clients listening to that specific file, as well as clients watching the root path (`/`). Non-Zettelkasten files are ignored.
-   - On Zettelkasten file deletion, pushes a "deleted/not found" warning page to file-specific clients, and updates root path clients to show the new most recently modified Zettelkasten note (or a placeholder page if none remain).
+   - On Zettelkasten file deletion, pushes a "deleted/not found" warning page to file-specific clients, and updates root path clients to show the new most recently modified Zettelkasten note (or a blank page if none remain).
 
 ## 5. Implementation Status Checklist
 - [x] Define Markdown extensions (`markdown.go`)

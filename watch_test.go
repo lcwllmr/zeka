@@ -67,15 +67,15 @@ func TestServeHTTP(t *testing.T) {
 		clients:  make(map[*Client]bool),
 	}
 
-	// 1. Test empty directory serves No Notes Found page
+	// 1. Test empty directory serves a blank page
 	req := httptest.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	ws.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200 for empty index, got %d", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "No Notes Found") {
-		t.Errorf("expected body to contain placeholder, got %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "<title></title>") || strings.Contains(rr.Body.String(), "No Notes Found") {
+		t.Errorf("expected body to be blank template, got %s", rr.Body.String())
 	}
 
 	// 2. Create note A
@@ -273,7 +273,7 @@ func TestRootSnappingAddDelete(t *testing.T) {
 		t.Error("timed out waiting for Note A snapback on root")
 	}
 
-	// 4. Delete note A -> root client should get "No Notes Found"
+	// 4. Delete note A -> root client should get a blank page
 	if err := os.Remove(noteAPath); err != nil {
 		t.Fatalf("failed to delete Note A: %v", err)
 	}
@@ -281,10 +281,10 @@ func TestRootSnappingAddDelete(t *testing.T) {
 
 	select {
 	case html := <-rootClient.ch:
-		if !strings.Contains(html, "No Notes Found") {
-			t.Errorf("expected root to receive No Notes Found page, got %s", html)
+		if !strings.Contains(html, "<title></title>") || strings.Contains(html, "No Notes Found") {
+			t.Errorf("expected root to receive blank template page, got %s", html)
 		}
 	case <-time.After(100 * time.Millisecond):
-		t.Error("timed out waiting for No Notes Found page")
+		t.Error("timed out waiting for blank page")
 	}
 }

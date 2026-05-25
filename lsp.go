@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/browser"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -28,9 +29,10 @@ var lastLSPWatchServer *WatchServer
 
 // lspHandler handles JSON-RPC 2.0 requests for the Language Server.
 type lspHandler struct {
-	xFlag bool
-	mu    sync.Mutex
-	ws    *WatchServer
+	xFlag         bool
+	mu            sync.Mutex
+	ws            *WatchServer
+	browserOpened bool
 }
 
 type didOpenParams struct {
@@ -139,9 +141,18 @@ func (h *lspHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonr
 		}
 		h.mu.Lock()
 		ws := h.ws
+		shouldOpen := h.xFlag && !h.browserOpened && ws != nil
+		if shouldOpen {
+			h.browserOpened = true
+		}
 		h.mu.Unlock()
 		if ws != nil {
 			ws.UpdateInMemoryFile(filename, params.TextDocument.Text, true)
+			if shouldOpen {
+				go func() {
+					_ = browser.OpenURL(ws.url + "/" + filename)
+				}()
+			}
 		}
 
 	case "textDocument/didChange":

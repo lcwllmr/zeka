@@ -32,6 +32,7 @@ type WatchServer struct {
 	server         *http.Server
 	pendingChanges map[string]string
 	debounceTimer  *time.Timer
+	url            string
 }
 
 // register adds a client to the server's client list.
@@ -116,14 +117,14 @@ func (ws *WatchServer) mostRecentFile() (string, error) {
 	return latestFile, nil
 }
 
-// renderNoFilesPage creates an HTML placeholder page when no notes are found in the watched directory.
+// renderNoFilesPage creates a blank HTML page when no notes are found in the watched directory.
 func (ws *WatchServer) renderNoFilesPage() string {
 	data := TemplateData{
-		Title:    "No Notes Found",
-		Abstract: "No markdown notes were found in the watched directory.",
+		Title:    "",
+		Abstract: "",
 		Macros:   template.JS("{}"),
 		TOC:      nil,
-		Body:     template.HTML("<p>Create a <code>.md</code> file in this directory to start editing.</p>"),
+		Body:     template.HTML(""),
 		Preview:  true,
 	}
 	tmpl, _ := template.New("page").Funcs(template.FuncMap{
@@ -475,7 +476,7 @@ func (ws *WatchServer) Close() error {
 	return nil
 }
 
-// StartLSPWatchServer starts a preview server on a random port for LSP integration, and opens the browser.
+// StartLSPWatchServer starts a preview server on a random port for LSP integration.
 func StartLSPWatchServer(dir string) (*WatchServer, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
@@ -500,13 +501,10 @@ func StartLSPWatchServer(dir string) (*WatchServer, error) {
 
 	actualPort := listener.Addr().(*net.TCPAddr).Port
 	url := fmt.Sprintf("http://127.0.0.1:%d", actualPort)
+	ws.url = url
 
 	// Since LSP runs on stdout/stdin, print startup logs to stderr
 	log.Printf("LSP watch server starting on: %s", url)
-
-	go func() {
-		_ = browser.OpenURL(url)
-	}()
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", actualPort),
